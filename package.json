@@ -1,0 +1,34 @@
+{
+  "name": "airdev",
+  "version": "0.0.1",
+  "description": "AirDev for JavaScrpit Project Setup",
+  "main": "./lib/index.js",
+  "bin": {
+    "airdev-update": "./bin/update.js"
+  },
+  "scripts": {
+    "build": "crlf --set=LF bin/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cshaxu/airdev-js.git"
+  },
+  "keywords": [
+    "airdev",
+    "scaffold",
+    "setup",
+    "tool"
+  ],
+  "author": "cshaxu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cshaxu/airdev-js/issues"
+  },
+  "homepage": "https://github.com/cshaxu/airdev-js#readme",
+  "files": [
+    "bin"
+  ],
+  "devDependencies": {
+    "crlf": "^1.1.1"
+  }
+}
