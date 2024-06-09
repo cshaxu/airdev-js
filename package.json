@@ -1,6 +1,6 @@
 {
   "name": "airdev",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "AirDev for JavaScrpit Project Setup",
   "main": "./lib/index.js",
   "bin": {
