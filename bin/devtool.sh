@@ -44,10 +44,17 @@ devtool() {
     echo "ERROR: missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\""
     return 1
   fi
+  if [[ "$DATABAG_JSON_PATH" == "" ]]; then
+    echo "ERROR: missing \"\$DATABAG_JSON_PATH\""
+    return 1
+  fi
+  if [[ "$DATABAG_PASSWORD_VAR_NAME" == "" ]]; then
+    echo "ERROR: missing \"\$DATABAG_PASSWORD_VAR_NAME\""
+    return 1
+  fi
 
   ENV_CURRENT_VAR_NAME="${PROJECT}_ENV_CURRENT"
   ENV_PENDING_VAR_NAME="${PROJECT}_ENV_PENDING"
-  COCKROACH_DATABASE_URL="${!COCKROACH_DATABASE_URL_VAR_NAME}"
 
   # execution
   if [[ "$1" == 'env' ]]; then
@@ -113,13 +120,17 @@ devtool() {
       if [[ $? -ne 0 ]]; then
         return 1
       fi
-      # apply env file of selection
+      # apply env file of common
       set -o allexport
       source ${!ENV_PENDING_VAR_NAME}.env
       set +o allexport
+      # apply env file of selection
+      set -o allexport
+      source $COMMON_ENV_OUTPUT_PATH
+      set +o allexport
+      # clean up
       eval "export $ENV_CURRENT_VAR_NAME=${!ENV_PENDING_VAR_NAME}"
       eval "export $ENV_PENDING_VAR_NAME="
-      # clean up
       $FUNCNAME env get
       return 0
 
@@ -158,7 +169,35 @@ devtool() {
       fi
       return 0
     fi
+  elif [[ "$1" == 'cred' ]]; then
+    DATABAG_PASSWORD="${!DATABAG_PASSWORD_VAR_NAME}"
+
+    if [[ "$2" == 'get' ]]; then
+      cred_get_key=$3
+      if [[ "$cred_get_key" == '' ]]; then
+        echo ERROR: missing key argument
+        return 1
+      fi
+      node node_modules/airdev/bin/databag.js --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_get_key
+      return 0
+
+    elif [[ "$2" == 'set' ]]; then
+      cred_set_key=$3
+      cred_set_value=$4
+      if [[ "$cred_set_key" == '' ]]; then
+        echo ERROR: missing key argument
+        return 1
+      fi
+      if [[ "$cred_set_value" == '' ]]; then
+        echo ERROR: missing value argument
+        return 1
+      fi
+      node node_modules/airdev/bin/databag.js --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value=$cred_set_value
+      return 0
+    fi
   elif [[ "$1" == 'db' ]]; then
+    COCKROACH_DATABASE_URL="${!COCKROACH_DATABASE_URL_VAR_NAME}"
+
     if [[ "$2" == 'sql' ]]; then
       # Login to cockroach sql terminal
       db_sql_env_target=$3
@@ -175,7 +214,7 @@ devtool() {
       echo
       $FUNCNAME env restore
       return 0
-    
+
     elif [[ "$2" == 'view' ]]; then
       # Opens Prisma Studio to view the database
       db_view_env_target=$3
@@ -283,7 +322,7 @@ devtool() {
         # Initialize cockroach local db
         cockroach init --insecure
         return 0
-      
+
       elif [[ "$3" == 'reset' ]]; then
         # Reset cockroach local db
         $FUNCNAME env set local
@@ -319,6 +358,10 @@ devtool() {
   echo "  $FUNCNAME env lock <target>             Lock project env for all sessions"
   echo "  $FUNCNAME env restore                   Restore env from lock file"
   echo "  $FUNCNAME env reset_vars                Reset locally cached env vars"
+  echo
+  echo "Credential Commands:"
+  echo "  $FUNCNAME cred get <path>               Get credential value"
+  echo "  $FUNCNAME cred set <path> <value>       Set credential value"
   echo
   echo "Db Commands:"
   echo "  $FUNCNAME db sql <target?>              Login to cockroach sql terminal"

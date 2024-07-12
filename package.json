@@ -4,10 +4,11 @@
   "description": "AirDev for JavaScrpit Project Setup",
   "main": "./lib/index.js",
   "bin": {
-    "airdev-update": "./bin/update.js"
+    "airdev-update": "./bin/update.js",
+    "airdev-databag": "./bin/databag.js"
   },
   "scripts": {
-    "build": "crlf --set=LF bin/*"
+    "build": "rm -rf ./lib && tsc -p tsconfig.json && crlf --set=LF bin/*"
   },
   "repository": {
     "type": "git",
@@ -26,9 +27,12 @@
   },
   "homepage": "https://github.com/cshaxu/airdev-js#readme",
   "files": [
-    "bin"
+    "bin",
+    "lib"
   ],
   "devDependencies": {
-    "crlf": "^1.1.1"
+    "@types/node": "^20.12.12",
+    "crlf": "^1.1.1",
+    "typescript": "^5.4.5"
   }
 }
