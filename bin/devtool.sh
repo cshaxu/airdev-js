@@ -178,7 +178,7 @@ devtool() {
         echo ERROR: missing key argument
         return 1
       fi
-      node node_modules/airdev/bin/databag.js --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_get_key
+      npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_get_key
       return 0
 
     elif [[ "$2" == 'set' ]]; then
@@ -192,7 +192,7 @@ devtool() {
         echo ERROR: missing value argument
         return 1
       fi
-      node node_modules/airdev/bin/databag.js --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value=$cred_set_value
+      npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value=$cred_set_value
       return 0
     fi
   elif [[ "$1" == 'db' ]]; then
