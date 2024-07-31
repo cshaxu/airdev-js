@@ -194,6 +194,20 @@ devtool() {
       fi
       npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value=$cred_set_value
       return 0
+
+    elif [[ "$2" == 'setf' ]]; then
+      cred_set_key=$3
+      cred_set_file=$4
+      if [[ "$cred_set_key" == '' ]]; then
+        echo ERROR: missing key argument
+        return 1
+      fi
+      if [[ "$cred_set_file" == '' ]]; then
+        echo ERROR: missing file path argument
+        return 1
+      fi
+      npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value-file=$cred_set_file
+      return 0
     fi
   elif [[ "$1" == 'db' ]]; then
     COCKROACH_DATABASE_URL="${!COCKROACH_DATABASE_URL_VAR_NAME}"
