@@ -32,24 +32,16 @@ devtool() {
     echo "ERROR: missing \"\$BASE_DB_ENV_TARGET\""
     return 1
   fi
+  if [[ "$OP_ACCOUNT" == "" ]]; then
+    echo "ERROR: missing \"\$OP_ACCOUNT\""
+    return 1
+  fi
   if [[ "$ENV_TEMPLATE_PATH" == "" ]]; then
     echo "ERROR: missing \"\$ENV_TEMPLATE_PATH\""
     return 1
   fi
   if [[ "$COMMON_ENV_OUTPUT_PATH" == "" ]]; then
     echo "ERROR: missing \"\$COMMON_ENV_OUTPUT_PATH\""
-    return 1
-  fi
-  if [[ "$COCKROACH_DATABASE_URL_VAR_NAME" == "" ]]; then
-    echo "ERROR: missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\""
-    return 1
-  fi
-  if [[ "$DATABAG_JSON_PATH" == "" ]]; then
-    echo "ERROR: missing \"\$DATABAG_JSON_PATH\""
-    return 1
-  fi
-  if [[ "$DATABAG_PASSWORD_VAR_NAME" == "" ]]; then
-    echo "ERROR: missing \"\$DATABAG_PASSWORD_VAR_NAME\""
     return 1
   fi
 
@@ -71,9 +63,9 @@ devtool() {
         return 1
       fi
       # login to 1password
-      op whoami > /dev/null 2>&1
+      op whoami >/dev/null 2>&1
       if [[ $? -ne 0 ]]; then
-        eval $(op signin)
+        eval $(op signin --account $OP_ACCOUNT)
       fi
       # fetch env vars
       op inject -i $ENV_TEMPLATE_PATH/$env_fetch_vars_internal_env_var_target -o $env_fetch_vars_internal_output_file
@@ -147,7 +139,7 @@ devtool() {
       if [[ $? -ne 0 ]]; then
         return 1
       fi
-      echo ${!ENV_CURRENT_VAR_NAME} > $LOCK_FILE
+      echo ${!ENV_CURRENT_VAR_NAME} >$LOCK_FILE
       return 0
 
     elif [[ "$2" == 'restore' ]]; then
@@ -170,7 +162,16 @@ devtool() {
       return 0
     fi
   elif [[ "$1" == 'cred' ]]; then
-    DATABAG_PASSWORD="${!DATABAG_PASSWORD_VAR_NAME}"
+    if [[ "$DATABAG_JSON_PATH" == "" ]]; then
+      echo "ERROR: missing \"\$DATABAG_JSON_PATH\""
+      return 1
+    fi
+    if [[ "$DATABAG_PASSWORD_VAR_NAME" == "" ]]; then
+      echo "ERROR: missing \"\$DATABAG_PASSWORD_VAR_NAME\""
+      return 1
+    fi
+
+    cred_databag_password="${!DATABAG_PASSWORD_VAR_NAME}"
 
     if [[ "$2" == 'get' ]]; then
       cred_get_key=$3
@@ -178,7 +179,7 @@ devtool() {
         echo ERROR: missing key argument
         return 1
       fi
-      npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_get_key
+      npx databag -- --file=$DATABAG_JSON_PATH --password=$cred_databag_password --key=$cred_get_key
       return 0
 
     elif [[ "$2" == 'set' ]]; then
@@ -192,7 +193,7 @@ devtool() {
         echo ERROR: missing value argument
         return 1
       fi
-      npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value=$cred_set_value
+      npx databag -- --file=$DATABAG_JSON_PATH --password=$cred_databag_password --key=$cred_set_key --value=$cred_set_value
       return 0
 
     elif [[ "$2" == 'setf' ]]; then
@@ -206,30 +207,20 @@ devtool() {
         echo ERROR: missing file path argument
         return 1
       fi
-      npx databag -- --file=$DATABAG_JSON_PATH --password=$DATABAG_PASSWORD --key=$cred_set_key --value-file=$cred_set_file
+      npx databag -- --file=$DATABAG_JSON_PATH --password=$cred_databag_password --key=$cred_set_key --value-file=$cred_set_file
       return 0
     fi
   elif [[ "$1" == 'db' ]]; then
-    COCKROACH_DATABASE_URL="${!COCKROACH_DATABASE_URL_VAR_NAME}"
+    if [[ -n "$COCKROACH_DATABASE_URL_VAR_NAME" && -z "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+      db_database_url="${!COCKROACH_DATABASE_URL_VAR_NAME}"
+    elif [[ -z "$COCKROACH_DATABASE_URL_VAR_NAME" && -n "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+      db_database_url="${!POSTGRES_DATABASE_URL_VAR_NAME}"
+    else
+      echo "ERROR: Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
+      return 1
+    fi
 
-    if [[ "$2" == 'sql' ]]; then
-      # Login to cockroach sql terminal
-      db_sql_env_target=$3
-      $FUNCNAME env set $db_sql_env_target
-      if [[ $? -ne 0 ]]; then
-        return 1
-      fi
-      option=''
-      if [[ "$db_sql_env_target" == "local" ]]; then
-        option='--insecure'
-      fi
-      echo
-      cockroach sql --url $COCKROACH_DATABASE_URL $option
-      echo
-      $FUNCNAME env restore
-      return 0
-
-    elif [[ "$2" == 'view' ]]; then
+    if [[ "$2" == 'view' ]]; then
       # Opens Prisma Studio to view the database
       db_view_env_target=$3
       $FUNCNAME env set $db_view_env_target
@@ -279,9 +270,9 @@ devtool() {
         fi
         db_migration_create_migration_file=$db_migration_create_migration_path/migration.sql
         npx prisma migrate diff \
-          --from-url $COCKROACH_DATABASE_URL \
+          --from-url $db_database_url \
           --to-schema-datamodel $PRISMA_SCHEMA_FILE \
-          --script > $db_migration_create_migration_file
+          --script >$db_migration_create_migration_file
         echo
         $FUNCNAME env restore
         return 0
@@ -312,83 +303,142 @@ devtool() {
         return 0
       fi
     fi
-  elif [[ "$1" == 'local' ]]; then
-    if [[ "$2" == 'inngest' ]]; then
-      # Start local inngest dev server
-      npx inngest-cli@latest dev
-      return 0
 
-    elif [[ "$2" == 'stripe' ]]; then
-      if [[ "$STRIPE_WEBHOOK_URL" == '' ]]; then
-        echo "ERROR: missing \"\$STRIPE_WEBHOOK_URL\""
+  elif [[ "$1" == 'cockroach' ]]; then
+    if [[ "$COCKROACH_DATABASE_URL_VAR_NAME" == "" ]]; then
+      echo "ERROR: missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\""
+      return 1
+    fi
+
+    if [[ "$2" == 'sql' ]]; then
+      # Login to cockroach sql terminal
+      cockroach_sql_env_target=$3
+      $FUNCNAME env set $cockroach_sql_env_target
+      if [[ $? -ne 0 ]]; then
         return 1
       fi
-      # Start local stripe webhook listener
-      echo "Have you turned off the test mode webhook on Stripe Developer Portal? [yes/no]"
-      read answer
-      if [[ "$answer" == 'yes' ]]; then
-        stripe listen --forward-to $STRIPE_WEBHOOK_URL
+      option=''
+      if [[ "$cockroach_sql_env_target" == "local" ]]; then
+        option='--insecure'
       fi
+      echo
+      cockroach sql --url ${!COCKROACH_DATABASE_URL_VAR_NAME} $option
+      echo
+      $FUNCNAME env restore
       return 0
 
-    elif [[ "$2" == 'cockroach' ]]; then
-      if [[ "$3" == 'init' ]]; then
-        # Initialize cockroach local db
-        cockroach init --insecure
-        return 0
+    elif [[ "$2" == 'init' ]]; then
+      # Initialize cockroach local db
+      cockroach init --insecure
+      return 0
 
-      elif [[ "$3" == 'reset' ]]; then
-        # Reset cockroach local db
-        $FUNCNAME env set local
-        local_db_name="${COCKROACH_DATABASE_URL%%\?*}"
-        local_db_name="${local_db_name##*/}"
-        cockroach sql -u root --insecure --execute="DROP DATABASE IF EXISTS $local_db_name;CREATE DATABASE IF NOT EXISTS $local_db_name;SHOW DATABASES"
-        $FUNCNAME env restore
-        return 0
+    elif [[ "$2" == 'reset' ]]; then
+      # Reset cockroach local db
+      $FUNCNAME env set local
+      local_db_name="${COCKROACH_DATABASE_URL%%\?*}"
+      local_db_name="${local_db_name##*/}"
+      cockroach sql -u root --insecure --execute="DROP DATABASE IF EXISTS $local_db_name;CREATE DATABASE IF NOT EXISTS $local_db_name;SHOW DATABASES"
+      $FUNCNAME env restore
+      return 0
 
-      elif [[ "$3" == 'start' ]]; then
-        # Start local cockroach db instance
-        node_id=26257
-        node_path=~/.cockroach/node_$node_id
-        if [[ ! -d "$node_path" ]]; then
-          mkdir -p "$node_path"
-        fi
-        cockroach start \
-          --insecure \
-          --store=$node_path \
-          --listen-addr=localhost:$node_id \
-          --http-addr=localhost:8080 \
-          --join=localhost:$node_id
-        return 0
+    elif [[ "$2" == 'start' ]]; then
+      # Start local cockroach db instance
+      node_id=26257
+      node_path=~/.cockroach/node_$node_id
+      if [[ ! -d "$node_path" ]]; then
+        mkdir -p "$node_path"
       fi
+      cockroach start \
+        --insecure \
+        --store=$node_path \
+        --listen-addr=localhost:$node_id \
+        --http-addr=localhost:8080 \
+        --join=localhost:$node_id
+      return 0
     fi
+
+  elif [[ "$1" == 'postgres' ]]; then
+    if [[ "$POSTGRES_DATABASE_URL_VAR_NAME" == "" ]]; then
+      echo "ERROR: missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\""
+      return 1
+    fi
+
+    if [[ "$2" == 'sql' ]]; then
+      # Login to cockroach sql terminal
+      postgres_sql_env_target=$3
+      $FUNCNAME env set $postgres_sql_env_target
+      if [[ $? -ne 0 ]]; then
+        return 1
+      fi
+      postgres_database_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+      if [[ $postgres_database_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+        postgres_username="${BASH_REMATCH[1]}"
+        postgres_password="${BASH_REMATCH[2]}"
+        postgres_host="${BASH_REMATCH[3]}"
+        postgres_port="${BASH_REMATCH[4]}"
+        postgres_database="${BASH_REMATCH[5]}"
+      else
+        echo "Error: invalid PostgreSQL URL format."
+        return 1
+      fi
+      echo
+      psql -h $postgres_host -U $postgres_username -d $postgres_database -p $postgres_port
+      echo
+      $FUNCNAME env restore
+      return 0
+    fi
+
+  elif [[ "$1" == 'inngest' ]]; then
+    # Start local inngest dev server
+    npx inngest-cli@latest dev
+    return 0
+
+  elif [[ "$1" == 'stripe' ]]; then
+    if [[ "$STRIPE_WEBHOOK_URL" == '' ]]; then
+      echo "ERROR: missing \"\$STRIPE_WEBHOOK_URL\""
+      return 1
+    fi
+
+    # Start local stripe webhook listener
+    echo "Have you turned off the test mode webhook on Stripe Developer Portal? [yes/no]"
+    read answer
+    if [[ "$answer" == 'yes' ]]; then
+      stripe listen --forward-to $STRIPE_WEBHOOK_URL
+    fi
+    return 0
+
   fi
 
   echo "Usage: $FUNCNAME <command> <args>"
   echo
-  echo "Env Commands:"
+  echo "Environment Commands:"
   echo "  $FUNCNAME env get                       Get project env in the current session"
   echo "  $FUNCNAME env set <target?>             Set project env in the current session"
   echo "  $FUNCNAME env lock <target>             Lock project env for all sessions"
   echo "  $FUNCNAME env restore                   Restore env from lock file"
   echo "  $FUNCNAME env reset_vars                Reset locally cached env vars"
   echo
-  echo "Credential Commands:"
+  echo "Credential Commands (Databag):"
   echo "  $FUNCNAME cred get <path>               Get credential value"
   echo "  $FUNCNAME cred set <path> <value>       Set credential value"
   echo
-  echo "Db Commands:"
-  echo "  $FUNCNAME db sql <target?>              Login to cockroach sql terminal"
+  echo "Database Commands (Prisma):"
   echo "  $FUNCNAME db view <target?>             Opens Prisma Studio to view the database"
   echo "  $FUNCNAME db pull_schema                Refresh local Prisma schema"
   echo "  $FUNCNAME db migration create <name>    Create Prisma db migrate script"
   echo "  $FUNCNAME db migration deploy <target>  Deploy migrations"
   echo
-  echo "Local Service Commands:"
-  echo "  $FUNCNAME local inngest                 Start local inngest dev server"
-  echo "  $FUNCNAME local stripe                  Start local stripe webhook listener"
-  echo "  $FUNCNAME local cockroach init          Initialize cockroach local db"
-  echo "  $FUNCNAME local cockroach reset         Reset cockroach local db"
-  echo "  $FUNCNAME local cockroach start         Start local cockroach db instance"
+  echo "Cockroach Commands:"
+  echo "  $FUNCNAME cockroach sql <target?>       Open cockroach sql terminal"
+  echo "  $FUNCNAME cockroach init                Initialize cockroach local db"
+  echo "  $FUNCNAME cockroach reset               Reset cockroach local db"
+  echo "  $FUNCNAME cockroach start               Start local cockroach db instance"
+  echo
+  echo "PostgreSQL Commands:"
+  echo "  $FUNCNAME postgres sql <target?>        Open postgresql terminal"
+  echo
+  echo "Other Service Commands:"
+  echo "  $FUNCNAME inngest                       Start local inngest dev server"
+  echo "  $FUNCNAME stripe                        Start local stripe webhook listener"
   echo
 }
