@@ -311,7 +311,7 @@ devtool() {
     fi
 
     if [[ "$2" == 'sql' ]]; then
-      # Login to cockroach sql terminal
+      # Login to sql terminal
       cockroach_sql_env_target=$3
       $FUNCNAME env set $cockroach_sql_env_target
       if [[ $? -ne 0 ]]; then
@@ -333,11 +333,12 @@ devtool() {
       return 0
 
     elif [[ "$2" == 'reset' ]]; then
-      # Reset cockroach local db
+      # Reset local db
       $FUNCNAME env set local
-      local_db_name="${COCKROACH_DATABASE_URL%%\?*}"
-      local_db_name="${local_db_name##*/}"
-      cockroach sql -u root --insecure --execute="DROP DATABASE IF EXISTS $local_db_name;CREATE DATABASE IF NOT EXISTS $local_db_name;SHOW DATABASES"
+      cockroach_reset_db_url=${!COCKROACH_DATABASE_URL_VAR_NAME}
+      cockroach_reset_db_name="${cockroach_reset_db_url%%\?*}"
+      cockroach_reset_db_name="${cockroach_reset_db_name##*/}"
+      cockroach sql -u root --insecure --execute="DROP DATABASE IF EXISTS $cockroach_reset_db_name;CREATE DATABASE IF NOT EXISTS $cockroach_reset_db_name;SHOW DATABASES"
       $FUNCNAME env restore
       return 0
 
@@ -364,14 +365,14 @@ devtool() {
     fi
 
     if [[ "$2" == 'sql' ]]; then
-      # Login to cockroach sql terminal
+      # Login to sql terminal
       postgres_sql_env_target=$3
       $FUNCNAME env set $postgres_sql_env_target
       if [[ $? -ne 0 ]]; then
         return 1
       fi
-      postgres_database_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
-      if [[ $postgres_database_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+      postgres_sql_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+      if [[ $postgres_sql_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
         postgres_username="${BASH_REMATCH[1]}"
         postgres_password="${BASH_REMATCH[2]}"
         postgres_host="${BASH_REMATCH[3]}"
@@ -386,6 +387,29 @@ devtool() {
       echo
       $FUNCNAME env restore
       return 0
+
+    elif [[ "$2" == 'reset' ]]; then
+      # Reset local db
+      $FUNCNAME env set local
+      postgres_reset_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+      if [[ $postgres_reset_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+        postgres_username="${BASH_REMATCH[1]}"
+        postgres_password="${BASH_REMATCH[2]}"
+        postgres_host="${BASH_REMATCH[3]}"
+        postgres_port="${BASH_REMATCH[4]}"
+        postgres_database="${BASH_REMATCH[5]}"
+      else
+        echo "Error: invalid PostgreSQL URL format."
+        return 1
+      fi
+      echo
+      psql -h $postgres_host -U $postgres_username -d postgres -p $postgres_port \
+           -c "DROP DATABASE \"$postgres_database\";" \
+           -c "CREATE DATABASE \"$postgres_database\";"
+      echo
+      $FUNCNAME env restore
+      return 0
+
     fi
 
   elif [[ "$1" == 'inngest' ]]; then
@@ -436,6 +460,7 @@ devtool() {
   echo
   echo "PostgreSQL Commands:"
   echo "  $FUNCNAME postgres sql <target?>        Open postgresql terminal"
+  echo "  $FUNCNAME postgres reset                Reset postgresql local db"
   echo
   echo "Other Service Commands:"
   echo "  $FUNCNAME inngest                       Start local inngest dev server"
