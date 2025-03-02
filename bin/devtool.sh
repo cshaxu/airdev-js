@@ -12,36 +12,36 @@ devtool() {
 
   # load config
   if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "ERROR: please run from the project root with \"$CONFIG_FILE\""
+    echo "❌ please run from the project root with \"$CONFIG_FILE\""
     return 1
   fi
   source "$CONFIG_FILE"
   if [[ "$PROJECT" == "" ]]; then
-    echo "ERROR: missing \"\$PROJECT\""
+    echo "❌ missing \"\$PROJECT\""
     return 1
   fi
   if [[ "$VALID_ENV_TARGETS" == "" ]]; then
-    echo "ERROR: missing \"\$VALID_ENV_TARGETS\""
+    echo "❌ missing \"\$VALID_ENV_TARGETS\""
     return 1
   fi
   if [[ "$DEFAULT_ENV_TARGET" == "" ]]; then
-    echo "ERROR: missing \"\$DEFAULT_ENV_TARGET\""
+    echo "❌ missing \"\$DEFAULT_ENV_TARGET\""
     return 1
   fi
   if [[ "$BASE_DB_ENV_TARGET" == "" ]]; then
-    echo "ERROR: missing \"\$BASE_DB_ENV_TARGET\""
+    echo "❌ missing \"\$BASE_DB_ENV_TARGET\""
     return 1
   fi
   if [[ "$OP_ACCOUNT" == "" ]]; then
-    echo "ERROR: missing \"\$OP_ACCOUNT\""
+    echo "❌ missing \"\$OP_ACCOUNT\""
     return 1
   fi
   if [[ "$ENV_TEMPLATE_PATH" == "" ]]; then
-    echo "ERROR: missing \"\$ENV_TEMPLATE_PATH\""
+    echo "❌ missing \"\$ENV_TEMPLATE_PATH\""
     return 1
   fi
   if [[ "$COMMON_ENV_OUTPUT_PATH" == "" ]]; then
-    echo "ERROR: missing \"\$COMMON_ENV_OUTPUT_PATH\""
+    echo "❌ missing \"\$COMMON_ENV_OUTPUT_PATH\""
     return 1
   fi
 
@@ -59,7 +59,7 @@ devtool() {
       fi
       # check 1password cli
       if [[ $(which op) == '' ]]; then
-        echo ERROR: please install 1password cli: https://developer.1password.com/docs/cli/get-started/
+        echo ❌ please install 1password cli: https://developer.1password.com/docs/cli/get-started/
         return 1
       fi
       # login to 1password
@@ -70,14 +70,14 @@ devtool() {
       # fetch env vars
       op inject -i $ENV_TEMPLATE_PATH/$env_fetch_vars_internal_env_var_target -o $env_fetch_vars_internal_output_file
       if [[ $? -ne 0 ]]; then
-        echo "ERROR: Failed to create "$env_fetch_vars_internal_env_var_target" env file \"$env_fetch_vars_internal_output_file\""
+        echo "❌ Failed to create "$env_fetch_vars_internal_env_var_target" env file \"$env_fetch_vars_internal_output_file\""
         return 1
       fi
       return 0
 
     elif [[ "$2" == 'get' ]]; then
       # Get project env in the current session
-      echo INFO: $ENV_CURRENT_VAR_NAME=${!ENV_CURRENT_VAR_NAME}
+      echo ℹ $ENV_CURRENT_VAR_NAME=${!ENV_CURRENT_VAR_NAME}
       return 0
 
     elif [[ "$2" == 'set' ]]; then
@@ -95,7 +95,7 @@ devtool() {
         fi
       done
       if [[ $is_valid -eq 0 ]]; then
-        echo "ERROR: Invalid env target \"$env_set_env_target\""
+        echo "❌ Invalid env target \"$env_set_env_target\""
         return 1
       fi
       if [[ $? -ne 0 ]]; then
@@ -132,7 +132,7 @@ devtool() {
       if [[ "$env_lock_env_target" == '' ]]; then
         targets1=$(printf "%s/" "${VALID_ENV_TARGETS[@]}")
         targets2=${targets1%/}
-        echo "ERROR: Missing env target \"${targets2}\""
+        echo "❌ Missing env target \"${targets2}\""
         return 1
       fi
       $FUNCNAME env set $env_lock_env_target
@@ -163,11 +163,11 @@ devtool() {
     fi
   elif [[ "$1" == 'cred' ]]; then
     if [[ "$DATABAG_JSON_PATH" == "" ]]; then
-      echo "ERROR: missing \"\$DATABAG_JSON_PATH\""
+      echo "❌ missing \"\$DATABAG_JSON_PATH\""
       return 1
     fi
     if [[ "$DATABAG_PASSWORD_VAR_NAME" == "" ]]; then
-      echo "ERROR: missing \"\$DATABAG_PASSWORD_VAR_NAME\""
+      echo "❌ missing \"\$DATABAG_PASSWORD_VAR_NAME\""
       return 1
     fi
 
@@ -176,7 +176,7 @@ devtool() {
     if [[ "$2" == 'get' ]]; then
       cred_get_key=$3
       if [[ "$cred_get_key" == '' ]]; then
-        echo ERROR: missing key argument
+        echo ❌ missing key argument
         return 1
       fi
       npx databag -- --file=$DATABAG_JSON_PATH --password=$cred_databag_password --key=$cred_get_key
@@ -186,11 +186,11 @@ devtool() {
       cred_set_key=$3
       cred_set_value=$4
       if [[ "$cred_set_key" == '' ]]; then
-        echo ERROR: missing key argument
+        echo ❌ missing key argument
         return 1
       fi
       if [[ "$cred_set_value" == '' ]]; then
-        echo ERROR: missing value argument
+        echo ❌ missing value argument
         return 1
       fi
       npx databag -- --file=$DATABAG_JSON_PATH --password=$cred_databag_password --key=$cred_set_key --value=$cred_set_value
@@ -200,11 +200,11 @@ devtool() {
       cred_set_key=$3
       cred_set_file=$4
       if [[ "$cred_set_key" == '' ]]; then
-        echo ERROR: missing key argument
+        echo ❌ missing key argument
         return 1
       fi
       if [[ "$cred_set_file" == '' ]]; then
-        echo ERROR: missing file path argument
+        echo ❌ missing file path argument
         return 1
       fi
       npx databag -- --file=$DATABAG_JSON_PATH --password=$cred_databag_password --key=$cred_set_key --value-file=$cred_set_file
@@ -216,7 +216,7 @@ devtool() {
     elif [[ -z "$COCKROACH_DATABASE_URL_VAR_NAME" && -n "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
       db_database_url="${!POSTGRES_DATABASE_URL_VAR_NAME}"
     else
-      echo "ERROR: Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
+      echo "❌ Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
       return 1
     fi
 
@@ -249,7 +249,7 @@ devtool() {
         # Create Prisma db migrate script
         db_migration_create_migration_name=$4
         if [[ "$db_migration_create_migration_name" == '' ]]; then
-          echo ERROR: missing migration name argument
+          echo ❌ missing migration name argument
           return 1
         fi
         $FUNCNAME env set $BASE_DB_ENV_TARGET
@@ -261,10 +261,15 @@ devtool() {
         if [[ ! -d "$PRISMA_MIGRATIONS_PATH" ]]; then
           mkdir -p $PRISMA_MIGRATIONS_PATH
         fi
+
+        # find previous migration file
+        db_migration_create_last_migration_path=$(find "$PRISMA_MIGRATIONS_PATH" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
+        db_migration_create_last_migration_file=$db_migration_create_last_migration_path/migration.sql
+
         PRISMA_SCHEMA_FILE=prisma/schema.prisma
         db_migration_create_timestamp=$(date -u +'%Y%m%d%H%M%S')
         db_migration_create_migration_path=$PRISMA_MIGRATIONS_PATH/$db_migration_create_timestamp\_$db_migration_create_migration_name
-        echo INFO: Generating migration \"$db_migration_create_migration_path\" ...
+        echo ⏳ Generating migration \"$db_migration_create_migration_path\" ...
         if [[ ! -d "$db_migration_create_migration_path" ]]; then
           mkdir -p $db_migration_create_migration_path
         fi
@@ -275,6 +280,22 @@ devtool() {
           --script >$db_migration_create_migration_file
         echo
         $FUNCNAME env restore
+
+        if [[ -f "$db_migration_create_last_migration_file" ]]; then
+          overlap=$(comm -12 <(grep -vE '^\s*(--|$)' "$db_migration_create_last_migration_file" | sort) <(grep -vE '^\s*(--|$)' "$db_migration_create_migration_file" | sort))
+          if [[ -n "$overlap" ]]; then
+            echo
+            echo "❌ Migration \"$db_migration_create_migration_path\" overlaps with the last migration \"$db_migration_create_last_migration_path\""
+            echo
+            while IFS= read -r line; do
+              echo "$line"
+            done <<< "$overlap"
+            echo
+            echo "Please check the migration file and remove the overlap."
+            return 1
+          fi
+        fi
+
         return 0
 
       elif [[ "$3" == 'deploy' ]]; then
@@ -283,7 +304,7 @@ devtool() {
         if [[ "$db_migration_deploy_env_target" == '' ]]; then
           targets1=$(printf "%s/" "${VALID_ENV_TARGETS[@]}")
           targets2=${targets1%/}
-          echo "ERROR: Missing env target \"${targets2}\""
+          echo "❌ Missing env target \"${targets2}\""
           return 1
         fi
         $FUNCNAME env set $db_migration_deploy_env_target
@@ -306,7 +327,7 @@ devtool() {
 
   elif [[ "$1" == 'cockroach' ]]; then
     if [[ "$COCKROACH_DATABASE_URL_VAR_NAME" == "" ]]; then
-      echo "ERROR: missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\""
+      echo "❌ missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\""
       return 1
     fi
 
@@ -360,7 +381,7 @@ devtool() {
 
   elif [[ "$1" == 'postgres' ]]; then
     if [[ "$POSTGRES_DATABASE_URL_VAR_NAME" == "" ]]; then
-      echo "ERROR: missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\""
+      echo "❌ missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\""
       return 1
     fi
 
@@ -419,7 +440,7 @@ devtool() {
 
   elif [[ "$1" == 'stripe' ]]; then
     if [[ "$STRIPE_WEBHOOK_URL" == '' ]]; then
-      echo "ERROR: missing \"\$STRIPE_WEBHOOK_URL\""
+      echo "❌ missing \"\$STRIPE_WEBHOOK_URL\""
       return 1
     fi
 
