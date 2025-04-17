@@ -211,17 +211,97 @@ devtool() {
       return 0
     fi
   elif [[ "$1" == 'db' ]]; then
-    if [[ "$2" == 'view' ]]; then
-      # Opens Prisma Studio to view the database
-      db_view_env_target=$3
-      $FUNCNAME env set $db_view_env_target
-      if [[ $? -ne 0 ]]; then
+    if [[ -n "$COCKROACH_DATABASE_URL_VAR_NAME" && -z "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+      is_cockroach=true
+    elif [[ -z "$COCKROACH_DATABASE_URL_VAR_NAME" && -n "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+      is_postgres=true
+    else
+      echo "❌ Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
+      return 1
+    fi
+
+    if [[ "$2" == 'init' ]]; then
+      # Initialize local db
+      if [[ "$is_cockroach" == true ]]; then
+        # cockroach
+        cockroach init --insecure
+        return 0
+      else
+        echo "❌ missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\" - only Cockroach local is supported"
         return 1
       fi
-      npx prisma studio
-      echo
-      $FUNCNAME env restore
-      return 0
+
+    elif [[ "$2" == 'start' ]]; then
+      # Start local db
+      if [[ "$is_cockroach" == true ]]; then
+        # cockroach
+        node_id=26257
+        node_path=~/.cockroach/node_$node_id
+        if [[ ! -d "$node_path" ]]; then
+          mkdir -p "$node_path"
+        fi
+        cockroach start \
+          --insecure \
+          --store=$node_path \
+          --listen-addr=localhost:$node_id \
+          --http-addr=localhost:8080 \
+          --join=localhost:$node_id
+        return 0
+      else
+        echo "❌ missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\" - only Cockroach local is supported"
+        return 1
+      fi
+
+    elif [[ "$2" == 'reset' ]]; then
+      # Reset local db
+      if [[ "$is_cockroach" == true ]]; then
+        # cockroach
+        $FUNCNAME env set local
+        if [[ $? -ne 0 ]]; then
+          return 1
+        fi
+        cockroach_reset_db_url=${!COCKROACH_DATABASE_URL_VAR_NAME}
+        cockroach_reset_db_name="${cockroach_reset_db_url%%\?*}"
+        cockroach_reset_db_name="${cockroach_reset_db_name##*/}"
+
+        echo "Are you sure about resetting Cockroach local db? [yes/no]"
+        read answer
+        if [[ "$answer" == 'yes' ]]; then
+          cockroach sql -u root --insecure --execute="DROP DATABASE IF EXISTS $cockroach_reset_db_name;CREATE DATABASE IF NOT EXISTS $cockroach_reset_db_name;SHOW DATABASES"
+        fi
+
+        $FUNCNAME env restore
+        return 0
+      elif [[ "$is_postgres" == true ]]; then
+        # postgres
+        $FUNCNAME env set local
+        if [[ $? -ne 0 ]]; then
+          return 1
+        fi
+        postgres_reset_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+        if [[ $postgres_reset_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+          postgres_username="${BASH_REMATCH[1]}"
+          postgres_password="${BASH_REMATCH[2]}"
+          postgres_host="${BASH_REMATCH[3]}"
+          postgres_port="${BASH_REMATCH[4]}"
+          postgres_database="${BASH_REMATCH[5]}"
+        else
+          $FUNCNAME env restore
+          echo "Error: invalid PostgreSQL URL format."
+          return 1
+        fi
+        echo
+        echo "Are you sure about resetting Postgres local db? [yes/no]"
+        read answer
+        if [[ "$answer" == 'yes' ]]; then
+          PGPASSWORD=$postgres_password psql -h $postgres_host -U $postgres_username -d postgres -p $postgres_port \
+            -c "DROP DATABASE \"$postgres_database\";" \
+            -c "CREATE DATABASE \"$postgres_database\";"
+        fi
+        echo
+        $FUNCNAME env restore
+        return 0
+      fi
 
     elif [[ "$2" == 'sql' ]]; then
       db_sql_env_target=$3
@@ -230,7 +310,7 @@ devtool() {
         return 1
       fi
 
-      if [[ -n "$COCKROACH_DATABASE_URL_VAR_NAME" && -z "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+      if [[ "$is_cockroach" == true ]]; then
         db_sql_database_url="${!COCKROACH_DATABASE_URL_VAR_NAME}"
         # Login to sql terminal
         option=''
@@ -242,7 +322,7 @@ devtool() {
         echo
         $FUNCNAME env restore
         return 0
-      elif [[ -z "$COCKROACH_DATABASE_URL_VAR_NAME" && -n "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+      elif [[ "$is_postgres" == true ]]; then
         db_sql_database_url="${!POSTGRES_DATABASE_URL_VAR_NAME}"
         # Login to sql terminal
         if [[ $db_sql_database_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
@@ -252,18 +332,28 @@ devtool() {
           postgres_port="${BASH_REMATCH[4]}"
           postgres_database="${BASH_REMATCH[5]}"
         else
+          $FUNCNAME env restore
           echo "Error: invalid PostgreSQL URL format."
           return 1
         fi
         echo
-        psql -h $postgres_host -U $postgres_username -d $postgres_database -p $postgres_port
+        PGPASSWORD=$postgres_password psql -h $postgres_host -U $postgres_username -d $postgres_database -p $postgres_port
         echo
         $FUNCNAME env restore
         return 0
-      else
-        echo "❌ Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
+      fi
+
+    elif [[ "$2" == 'view' ]]; then
+      # Opens Prisma Studio to view the database
+      db_view_env_target=$3
+      $FUNCNAME env set $db_view_env_target
+      if [[ $? -ne 0 ]]; then
         return 1
       fi
+      npx prisma studio
+      echo
+      $FUNCNAME env restore
+      return 0
 
     elif [[ "$2" == 'pull_schema' ]]; then
       # Refresh local Prisma schema
@@ -381,7 +471,7 @@ devtool() {
         echo
         npx prisma migrate status
         echo
-        echo "Are you sure about resetting migrations to \"$db_migration_reset_env_target\"? [yes/no]"
+        echo "Are you sure about resetting migrations on \"$db_migration_reset_env_target\"? [yes/no]"
         read answer
         if [[ "$answer" == 'yes' ]]; then
           npx prisma migrate reset
@@ -389,74 +479,91 @@ devtool() {
         echo
         $FUNCNAME env restore
         return 0
+
+      elif [[ "$3" == 'list' ]]; then
+        db_migration_list_env_target=$4
+        if [[ "$db_migration_list_env_target" == '' ]]; then
+          targets1=$(printf "%s/" "${VALID_ENV_TARGETS[@]}")
+          targets2=${targets1%/}
+          echo "❌ Missing env target \"${targets2}\""
+          return 1
+        fi
+        $FUNCNAME env set $db_migration_list_env_target
+        if [[ $? -ne 0 ]]; then
+          return 1
+        fi
+
+        if [[ "$is_cockroach" == true ]]; then
+          echo "❌ missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\" - only Postgres is supported"
+          return 1
+        fi
+
+        db_migration_list_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+        if [[ $db_migration_list_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+          postgres_username="${BASH_REMATCH[1]}"
+          postgres_password="${BASH_REMATCH[2]}"
+          postgres_host="${BASH_REMATCH[3]}"
+          postgres_port="${BASH_REMATCH[4]}"
+          postgres_database="${BASH_REMATCH[5]}"
+        else
+          $FUNCNAME env restore
+          echo "Error: invalid PostgreSQL URL format."
+          return 1
+        fi
+        echo
+
+        PGPASSWORD=$postgres_password psql -h $postgres_host -U $postgres_username -d $postgres_database -p $postgres_port \
+          -c "SELECT migration_name FROM \"_prisma_migrations\" ORDER BY migration_name ASC;" \
+          -t -A
+
+        $FUNCNAME env restore
+        return 0
+
+      elif [[ "$3" == 'forget' ]]; then
+        db_migration_forget_migration_name=$4
+        db_migration_forget_env_target=$5
+        if [[ "$db_migration_forget_env_target" == '' ]]; then
+          targets1=$(printf "%s/" "${VALID_ENV_TARGETS[@]}")
+          targets2=${targets1%/}
+          echo "❌ Missing env target \"${targets2}\""
+          return 1
+        fi
+        $FUNCNAME env set $db_migration_forget_env_target
+        if [[ $? -ne 0 ]]; then
+          return 1
+        fi
+
+        if [[ "$is_cockroach" == true ]]; then
+          echo "❌ missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\" - only Postgres is supported"
+          return 1
+        fi
+
+        db_migration_forget_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+        if [[ $db_migration_forget_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+          postgres_username="${BASH_REMATCH[1]}"
+          postgres_password="${BASH_REMATCH[2]}"
+          postgres_host="${BASH_REMATCH[3]}"
+          postgres_port="${BASH_REMATCH[4]}"
+          postgres_database="${BASH_REMATCH[5]}"
+        else
+          $FUNCNAME env restore
+          echo "Error: invalid PostgreSQL URL format."
+          return 1
+        fi
+        echo
+
+        npx prisma migrate status
+        echo
+        echo "Are you sure about forgetting migration \"$db_migration_forget_migration_name\" on \"$db_migration_forget_env_target\"? [yes/no]"
+        read answer
+        if [[ "$answer" == 'yes' ]]; then
+          PGPASSWORD=$postgres_password psql -h $postgres_host -U $postgres_username -d $postgres_database -p $postgres_port \
+            -c "DELETE FROM \"_prisma_migrations\" WHERE migration_name='$db_migration_forget_migration_name';"
+        fi
+        echo
+        $FUNCNAME env restore
+        return 0
       fi
-    fi
-
-  elif [[ "$1" == 'cockroach' ]]; then
-    if [[ "$COCKROACH_DATABASE_URL_VAR_NAME" == "" ]]; then
-      echo "❌ missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\""
-      return 1
-    fi
-
-    if [[ "$2" == 'init' ]]; then
-      # Initialize cockroach local db
-      cockroach init --insecure
-      return 0
-
-    elif [[ "$2" == 'reset' ]]; then
-      # Reset local db
-      $FUNCNAME env set local
-      cockroach_reset_db_url=${!COCKROACH_DATABASE_URL_VAR_NAME}
-      cockroach_reset_db_name="${cockroach_reset_db_url%%\?*}"
-      cockroach_reset_db_name="${cockroach_reset_db_name##*/}"
-      cockroach sql -u root --insecure --execute="DROP DATABASE IF EXISTS $cockroach_reset_db_name;CREATE DATABASE IF NOT EXISTS $cockroach_reset_db_name;SHOW DATABASES"
-      $FUNCNAME env restore
-      return 0
-
-    elif [[ "$2" == 'start' ]]; then
-      # Start local cockroach db instance
-      node_id=26257
-      node_path=~/.cockroach/node_$node_id
-      if [[ ! -d "$node_path" ]]; then
-        mkdir -p "$node_path"
-      fi
-      cockroach start \
-        --insecure \
-        --store=$node_path \
-        --listen-addr=localhost:$node_id \
-        --http-addr=localhost:8080 \
-        --join=localhost:$node_id
-      return 0
-    fi
-
-  elif [[ "$1" == 'postgres' ]]; then
-    if [[ "$POSTGRES_DATABASE_URL_VAR_NAME" == "" ]]; then
-      echo "❌ missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\""
-      return 1
-    fi
-
-    if [[ "$2" == 'reset' ]]; then
-      # Reset local db
-      $FUNCNAME env set local
-      postgres_reset_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
-      if [[ $postgres_reset_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
-        postgres_username="${BASH_REMATCH[1]}"
-        postgres_password="${BASH_REMATCH[2]}"
-        postgres_host="${BASH_REMATCH[3]}"
-        postgres_port="${BASH_REMATCH[4]}"
-        postgres_database="${BASH_REMATCH[5]}"
-      else
-        echo "Error: invalid PostgreSQL URL format."
-        return 1
-      fi
-      echo
-      psql -h $postgres_host -U $postgres_username -d postgres -p $postgres_port \
-        -c "DROP DATABASE \"$postgres_database\";" \
-        -c "CREATE DATABASE \"$postgres_database\";"
-      echo
-      $FUNCNAME env restore
-      return 0
-
     fi
 
   elif [[ "$1" == 'inngest' ]]; then
@@ -494,11 +601,18 @@ devtool() {
   echo "  $FUNCNAME cred set <path> <value>       Set credential value"
   echo
   echo "Database Commands (Prisma):"
-  echo "  $FUNCNAME db view <target?>             Opens Prisma Studio to view the database"
+  echo "  $FUNCNAME db view <target?>             Opens Prisma Studio to view database"
   echo "  $FUNCNAME db sql <target?>              Access the database by CLI"
   echo "  $FUNCNAME db pull_schema                Refresh local Prisma schema"
   echo "  $FUNCNAME db migration create <name>    Create Prisma db migrate script"
   echo "  $FUNCNAME db migration deploy <target>  Deploy migrations"
+  echo "  $FUNCNAME db migration reset <target>   Reset migrations"
+  echo "  $FUNCNAME db migration list <target>    List existing migrations"
+  echo "  $FUNCNAME db migration forget <name> <target>"
+  echo "                                          Forget last migration (Postgres only)"
+  echo "  $FUNCNAME db init                       Initialize local db (Cockroach only)"
+  echo "  $FUNCNAME db start                      Start local db (Cockroach only)"
+  echo "  $FUNCNAME db reset                      Reset local db"
   echo
   echo "Cockroach Commands:"
   echo "  $FUNCNAME cockroach init                Initialize cockroach local db"
