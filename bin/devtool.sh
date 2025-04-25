@@ -220,7 +220,7 @@ devtool() {
       return 1
     fi
 
-    if [[ "$2" == 'init' ]]; then
+    if [[ "$2" == 'init_local' ]]; then
       # Initialize local db
       if [[ "$is_cockroach" == true ]]; then
         # cockroach
@@ -231,7 +231,7 @@ devtool() {
         return 1
       fi
 
-    elif [[ "$2" == 'start' ]]; then
+    elif [[ "$2" == 'start_local' ]]; then
       # Start local db
       if [[ "$is_cockroach" == true ]]; then
         # cockroach
@@ -252,7 +252,7 @@ devtool() {
         return 1
       fi
 
-    elif [[ "$2" == 'reset' ]]; then
+    elif [[ "$2" == 'reset_local' ]]; then
       # Reset local db
       if [[ "$is_cockroach" == true ]]; then
         # cockroach
@@ -610,17 +610,9 @@ devtool() {
   echo "  $FUNCNAME db migration list <target>    List existing migrations"
   echo "  $FUNCNAME db migration forget <name> <target>"
   echo "                                          Forget last migration (Postgres only)"
-  echo "  $FUNCNAME db init                       Initialize local db (Cockroach only)"
-  echo "  $FUNCNAME db start                      Start local db (Cockroach only)"
-  echo "  $FUNCNAME db reset                      Reset local db"
-  echo
-  echo "Cockroach Commands:"
-  echo "  $FUNCNAME cockroach init                Initialize cockroach local db"
-  echo "  $FUNCNAME cockroach reset               Reset cockroach local db"
-  echo "  $FUNCNAME cockroach start               Start local cockroach db instance"
-  echo
-  echo "PostgreSQL Commands:"
-  echo "  $FUNCNAME postgres reset                Reset postgresql local db"
+  echo "  $FUNCNAME db init_local                 Initialize local db (Cockroach only)"
+  echo "  $FUNCNAME db start_local                Start local db (Cockroach only)"
+  echo "  $FUNCNAME db reset_local                Reset local db"
   echo
   echo "Other Service Commands:"
   echo "  $FUNCNAME inngest                       Start local inngest dev server"
