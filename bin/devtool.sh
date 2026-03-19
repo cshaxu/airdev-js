@@ -44,6 +44,14 @@ devtool() {
     echo "❌ missing \"\$COMMON_ENV_OUTPUT_PATH\""
     return 1
   fi
+  if [[ "$DATABASE_TYPE" == "" ]]; then
+    echo "❌ missing \"\$DATABASE_TYPE\""
+    return 1
+  fi
+  if [[ "$DATABASE_URL_CMD" == "" ]]; then
+    echo "❌ missing \"\$DATABASE_URL_CMD\""
+    return 1
+  fi
 
   ENV_CURRENT_VAR_NAME="${PROJECT}_ENV_CURRENT"
   ENV_PENDING_VAR_NAME="${PROJECT}_ENV_PENDING"
@@ -211,12 +219,12 @@ devtool() {
       return 0
     fi
   elif [[ "$1" == 'db' ]]; then
-    if [[ -n "$COCKROACH_DATABASE_URL_VAR_NAME" && -z "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+    if [[ "$DATABASE_TYPE" == "cockroach" ]]; then
       is_cockroach=true
-    elif [[ -z "$COCKROACH_DATABASE_URL_VAR_NAME" && -n "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
+    elif [[ "$DATABASE_TYPE" == "postgres" ]]; then
       is_postgres=true
     else
-      echo "❌ Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
+      echo "❌ invalid \"\$DATABASE_TYPE\" - only \"cockroach\" or \"postgres\" supported"
       return 1
     fi
 
@@ -227,7 +235,7 @@ devtool() {
         cockroach init --insecure
         return 0
       else
-        echo "❌ missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\" - only Cockroach local is supported"
+        echo "❌ invalid \"\$DATABASE_TYPE\" - only cockroach\" supported"
         return 1
       fi
 
@@ -248,7 +256,7 @@ devtool() {
           --join=localhost:$node_id
         return 0
       else
-        echo "❌ missing \"\$COCKROACH_DATABASE_URL_VAR_NAME\" - only Cockroach local is supported"
+        echo "❌ invalid \"\$DATABASE_TYPE\" - only \"cockroach\" supported"
         return 1
       fi
 
@@ -260,7 +268,14 @@ devtool() {
         if [[ $? -ne 0 ]]; then
           return 1
         fi
-        cockroach_reset_db_url=${!COCKROACH_DATABASE_URL_VAR_NAME}
+
+        ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
+        DATABASE_URL="$($DATABASE_URL_CMD)"
+        if [[ $? -ne 0 ]]; then
+          echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
+          return 1
+        fi
+        cockroach_reset_db_url="$DATABASE_URL"
         cockroach_reset_db_name="${cockroach_reset_db_url%%\?*}"
         cockroach_reset_db_name="${cockroach_reset_db_name##*/}"
 
@@ -278,7 +293,15 @@ devtool() {
         if [[ $? -ne 0 ]]; then
           return 1
         fi
-        postgres_reset_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+
+        ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
+        DATABASE_URL="$($DATABASE_URL_CMD)"
+        if [[ $? -ne 0 ]]; then
+          echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
+          return 1
+        fi
+
+        postgres_reset_db_url="$DATABASE_URL"
         if [[ $postgres_reset_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
           postgres_username="${BASH_REMATCH[1]}"
           postgres_password="${BASH_REMATCH[2]}"
@@ -310,8 +333,15 @@ devtool() {
         return 1
       fi
 
+      ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
+      DATABASE_URL="$($DATABASE_URL_CMD)"
+      if [[ $? -ne 0 ]]; then
+        echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
+        return 1
+      fi
+
+      db_sql_database_url="$DATABASE_URL"
       if [[ "$is_cockroach" == true ]]; then
-        db_sql_database_url="${!COCKROACH_DATABASE_URL_VAR_NAME}"
         # Login to sql terminal
         option=''
         if [[ "$db_sql_env_target" == "local" ]]; then
@@ -323,7 +353,6 @@ devtool() {
         $FUNCNAME env restore
         return 0
       elif [[ "$is_postgres" == true ]]; then
-        db_sql_database_url="${!POSTGRES_DATABASE_URL_VAR_NAME}"
         # Login to sql terminal
         if [[ $db_sql_database_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
           postgres_username="${BASH_REMATCH[1]}"
@@ -380,14 +409,6 @@ devtool() {
         if [[ $? -ne 0 ]]; then
           return 1
         fi
-        if [[ -n "$COCKROACH_DATABASE_URL_VAR_NAME" && -z "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
-          db_migration_create_database_url="${!COCKROACH_DATABASE_URL_VAR_NAME}"
-        elif [[ -z "$COCKROACH_DATABASE_URL_VAR_NAME" && -n "$POSTGRES_DATABASE_URL_VAR_NAME" ]]; then
-          db_migration_create_database_url="${!POSTGRES_DATABASE_URL_VAR_NAME}"
-        else
-          echo "❌ Exactly one of COCKROACH_DATABASE_URL_VAR_NAME and POSTGRES_DATABASE_URL_VAR_NAME must be set."
-          return 1
-        fi
 
         echo
         PRISMA_MIGRATIONS_PATH=prisma/migrations
@@ -408,8 +429,8 @@ devtool() {
         fi
         db_migration_create_migration_file=$db_migration_create_migration_path/migration.sql
         npx prisma migrate diff \
-          --from-url $db_migration_create_database_url \
-          --to-schema-datamodel $PRISMA_SCHEMA_FILE \
+          --from-config-datasource \
+          --to-schema $PRISMA_SCHEMA_FILE \
           --script >$db_migration_create_migration_file
         echo
         $FUNCNAME env restore
@@ -493,29 +514,37 @@ devtool() {
           return 1
         fi
 
-        if [[ "$is_cockroach" == true ]]; then
-          echo "❌ missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\" - only Postgres is supported"
+        ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
+        DATABASE_URL="$($DATABASE_URL_CMD)"
+        if [[ $? -ne 0 ]]; then
+          echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
           return 1
         fi
 
-        db_migration_list_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
-        if [[ $db_migration_list_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
-          postgres_username="${BASH_REMATCH[1]}"
-          postgres_password="${BASH_REMATCH[2]}"
-          postgres_host="${BASH_REMATCH[3]}"
-          postgres_port="${BASH_REMATCH[4]}"
-          postgres_database="${BASH_REMATCH[5]}"
-        else
-          $FUNCNAME env restore
-          echo "Error: invalid PostgreSQL URL format."
-          return 1
-        fi
         echo
+        db_migration_list_sql="SELECT migration_name FROM \"_prisma_migrations\" ORDER BY migration_name ASC;"
+        db_migration_list_db_url="$DATABASE_URL"
+        if [[ "$is_cockroach" == true ]]; then
+            cockroach sql --url $db_migration_list_db_url --execute="$db_migration_list_sql" --insecure --format=tsv
+        elif [[ "$is_postgres" == true ]]; then
+          if [[ $db_migration_list_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
+            postgres_username="${BASH_REMATCH[1]}"
+            postgres_password="${BASH_REMATCH[2]}"
+            postgres_host="${BASH_REMATCH[3]}"
+            postgres_port="${BASH_REMATCH[4]}"
+            postgres_database="${BASH_REMATCH[5]}"
+            PGPASSWORD=$postgres_password psql -h $postgres_host \
+              -U $postgres_username -d $postgres_database -p $postgres_port \
+              -c $db_migration_list_sql \
+              -t -A
+          else
+            $FUNCNAME env restore
+            echo "Error: invalid PostgreSQL URL format."
+            return 1
+          fi
+        fi
 
-        PGPASSWORD=$postgres_password psql -h $postgres_host -U $postgres_username -d $postgres_database -p $postgres_port \
-          -c "SELECT migration_name FROM \"_prisma_migrations\" ORDER BY migration_name ASC;" \
-          -t -A
-
+        echo
         $FUNCNAME env restore
         return 0
 
@@ -534,11 +563,18 @@ devtool() {
         fi
 
         if [[ "$is_cockroach" == true ]]; then
-          echo "❌ missing \"\$POSTGRES_DATABASE_URL_VAR_NAME\" - only Postgres is supported"
+          echo "❌ invalid \"\$DATABASE_TYPE\" - only \"postgres\" supported"
           return 1
         fi
 
-        db_migration_forget_db_url=${!POSTGRES_DATABASE_URL_VAR_NAME}
+        ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
+        DATABASE_URL="$($DATABASE_URL_CMD)"
+        if [[ $? -ne 0 ]]; then
+          echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
+          return 1
+        fi
+
+        db_migration_forget_db_url="$DATABASE_URL"
         if [[ $db_migration_forget_db_url =~ postgresql://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+) ]]; then
           postgres_username="${BASH_REMATCH[1]}"
           postgres_password="${BASH_REMATCH[2]}"
