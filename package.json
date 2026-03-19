@@ -1,16 +1,11 @@
 {
-  "name": "airdev",
+  "name": "@airdev/tool",
   "version": "0.0.0",
-  "description": "JavaScript project setup tool",
-  "bin": {
-    "airdev-update": "./bin/update.js"
-  },
-  "scripts": {
-    "build": "crlf --set=LF bin/*"
-  },
+  "description": "airdev project setup tool",
+  "scripts": { "build": "crlf --set=LF bin/*" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cshaxu/airdev-js.git"
+    "url": "git+https://github.com/cshaxu/airdev-tool-js.git"
   },
   "keywords": [
     "airdev",
@@ -20,14 +15,8 @@
   ],
   "author": "cshaxu",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/cshaxu/airdev-js/issues"
-  },
-  "homepage": "https://github.com/cshaxu/airdev-js#readme",
-  "files": [
-    "bin"
-  ],
-  "devDependencies": {
-    "crlf": "^1.1.1"
-  }
+  "bugs": { "url": "https://github.com/cshaxu/airdev-tool-js/issues" },
+  "homepage": "https://github.com/cshaxu/airdev-tool-js#readme",
+  "files": ["bin"],
+  "devDependencies": {"crlf": "^1.1.1"}
 }
