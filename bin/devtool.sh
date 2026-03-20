@@ -270,7 +270,7 @@ devtool() {
         fi
 
         ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
-        DATABASE_URL="$($DATABASE_URL_CMD)"
+        DATABASE_URL="$(eval "$DATABASE_URL_CMD")"
         if [[ $? -ne 0 ]]; then
           echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
           return 1
@@ -295,7 +295,7 @@ devtool() {
         fi
 
         ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
-        DATABASE_URL="$($DATABASE_URL_CMD)"
+        DATABASE_URL="$(eval "$DATABASE_URL_CMD")"
         if [[ $? -ne 0 ]]; then
           echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
           return 1
@@ -334,7 +334,7 @@ devtool() {
       fi
 
       ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
-      DATABASE_URL="$($DATABASE_URL_CMD)"
+      DATABASE_URL="$(eval "$DATABASE_URL_CMD")"
       if [[ $? -ne 0 ]]; then
         echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
         return 1
@@ -515,7 +515,7 @@ devtool() {
         fi
 
         ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
-        DATABASE_URL="$($DATABASE_URL_CMD)"
+        DATABASE_URL="$(eval "$DATABASE_URL_CMD")"
         if [[ $? -ne 0 ]]; then
           echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
           return 1
@@ -568,7 +568,7 @@ devtool() {
         fi
 
         ENV_CURRENT=${!ENV_CURRENT_VAR_NAME}
-        DATABASE_URL="$($DATABASE_URL_CMD)"
+        DATABASE_URL="$(eval "$DATABASE_URL_CMD")"
         if [[ $? -ne 0 ]]; then
           echo "❌ failed to execute command \"\$DATABASE_URL_CMD\""
           return 1
